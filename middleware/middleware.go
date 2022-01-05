@@ -39,7 +39,20 @@ func CreateTicketOption(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "body to json request error", 404)
 	}
 
-	db := DbConnection()
+	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+
+	// open database
+	db, err := sql.Open("postgres", psqlconn)
+	if err != nil {
+		fmt.Errorf("%v",err)
+	}
+	// close database
+	defer db.Close()
+
+	// check db
+	err = db.Ping()
+
+	fmt.Println("Connected!")
 
 	sq := fmt.Sprintf("insert into ticket_options (name, \"desc\", allocation, created_at, updated_at) values ('%s', '%s', %d, current_timestamp, current_timestamp)",ticketOption.Name.String,ticketOption.Desc.String,ticketOption.Allocation)
 	_,err = db.Exec(sq)
@@ -61,10 +74,23 @@ func GetTicketOption(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	id := createKeyValuePairs(params)
 
-	db := DbConnection()
+	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+
+	// open database
+	db, err := sql.Open("postgres", psqlconn)
+	if err != nil {
+		fmt.Errorf("%v",err)
+	}
+	// close database
+	defer db.Close()
+
+	// check db
+	err = db.Ping()
+
+	fmt.Println("Connected!")
 
 	sq := fmt.Sprintf("select id::text,name,\"desc\",allocation,created_at,updated_at from  ticket_options where id::text = '%s'",id)
-	err := db.QueryRow(sq).Scan(&ticketOption.ID,&ticketOption.Name,&ticketOption.Desc,&ticketOption.Allocation,&ticketOption.CreatedAt,&ticketOption.UpdatedAt)
+	err = db.QueryRow(sq).Scan(&ticketOption.ID,&ticketOption.Name,&ticketOption.Desc,&ticketOption.Allocation,&ticketOption.CreatedAt,&ticketOption.UpdatedAt)
 	if err != nil {
 		http.Error(w,"",404)
 		return
@@ -108,10 +134,6 @@ func PurchasesFromTicketOptions(w http.ResponseWriter, r *http.Request) {
 
 	allocation := getAllocationOfTicketOptions(uuid.UUID(purchases.TicketOptionID),db)
 
-	if allocation <= 0 {
-		http.Error(w, "allocation get error", 404)
-	}
-
 	isThereAvailableTickets := quantityAndAllocationCompare(purchases.Quantity.Int64,allocation)
 
 	if isThereAvailableTickets {
@@ -130,6 +152,13 @@ func PurchasesFromTicketOptions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		sq = fmt.Sprintf("update ticket_options set allocation = allocation - %d where id::text ='%s' ", purchases.Quantity.Int64,ticketOptionsID)
+		_,err = db.Exec(sq)
+		if err != nil {
+			http.Error(w, "update ticket options error", 404)
+			return
+		}
+
 		json.NewEncoder(w).Encode(http.StatusOK)
 		return
 	}
@@ -141,24 +170,6 @@ func PurchasesFromTicketOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 //helper functions
-func DbConnection() *sql.DB{
-	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
-
-	// open database
-	db, err := sql.Open("postgres", psqlconn)
-	if err != nil {
-		fmt.Errorf("%v",err)
-	}
-	// close database
-	defer db.Close()
-
-	// check db
-	err = db.Ping()
-
-	fmt.Println("Connected!")
-
-	return db
-}
 func BodyToJsonReq(r *http.Request, data interface{}) error {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -182,7 +193,7 @@ func createKeyValuePairs(m map[string]string) string {
 }
 func quantityAndAllocationCompare(quantity int64, allocation int64) bool {
 
-	return allocation > quantity
+	return allocation >= quantity
 }
 func decreaseAllocationOfTicket (ticketOptionsID string,quantity int64, db *sql.DB) bool {
 
@@ -196,7 +207,7 @@ func decreaseAllocationOfTicket (ticketOptionsID string,quantity int64, db *sql.
 }
 func getAllocationOfTicketOptions (ticketOptionsID uuid.UUID, db *sql.DB) int64 {
 	var allocation int64
-	sq := fmt.Sprintf("select allocation from ticket_options where id::text = '%s'",ticketOptionsID)
+	sq := fmt.Sprintf("select coalesce(allocation,0) from ticket_options where id::text = '%s'",ticketOptionsID)
 	err := db.QueryRow(sq).Scan(&allocation)
 	if err != nil {
 		return 0

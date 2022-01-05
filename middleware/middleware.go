@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"example.com/m/models"
 	"fmt"
 	"github.com/gorilla/mux"
 	uuid2 "go.mongodb.org/mongo-driver/x/mongo/driver/uuid"
 	"io/ioutil"
-
-	"example.com/m/models"
 	"net/http"
 
 	_ "database/sql"
@@ -37,6 +36,7 @@ func CreateTicketOption(w http.ResponseWriter, r *http.Request) {
 	err := BodyToJsonReq(r,&ticketOption)
 	if err != nil {
 		http.Error(w, "body to json request error", 404)
+		return
 	}
 
 	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
@@ -44,7 +44,8 @@ func CreateTicketOption(w http.ResponseWriter, r *http.Request) {
 	// open database
 	db, err := sql.Open("postgres", psqlconn)
 	if err != nil {
-		fmt.Errorf("%v",err)
+		http.Error(w, "db connection error", 404)
+		return
 	}
 	// close database
 	defer db.Close()
@@ -57,13 +58,14 @@ func CreateTicketOption(w http.ResponseWriter, r *http.Request) {
 	sq := fmt.Sprintf("insert into ticket_options (name, \"desc\", allocation, created_at, updated_at) values ('%s', '%s', %d, current_timestamp, current_timestamp)",ticketOption.Name.String,ticketOption.Desc.String,ticketOption.Allocation)
 	_,err = db.Exec(sq)
 	if err != nil {
-		fmt.Errorf("%v",err)
-		panic(err)
+		http.Error(w, "insert ticket options error", 404)
+		return
 	}
 
 	json.NewEncoder(w).Encode(http.StatusOK)
 
 }
+
 func GetTicketOption(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Context-Type", "application/x-www-form-urlencoded")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -79,7 +81,8 @@ func GetTicketOption(w http.ResponseWriter, r *http.Request) {
 	// open database
 	db, err := sql.Open("postgres", psqlconn)
 	if err != nil {
-		fmt.Errorf("%v",err)
+		http.Error(w, "db connection error", 404)
+		return
 	}
 	// close database
 	defer db.Close()
@@ -92,7 +95,7 @@ func GetTicketOption(w http.ResponseWriter, r *http.Request) {
 	sq := fmt.Sprintf("select id::text,name,\"desc\",allocation,created_at,updated_at from  ticket_options where id::text = '%s'",id)
 	err = db.QueryRow(sq).Scan(&ticketOption.ID,&ticketOption.Name,&ticketOption.Desc,&ticketOption.Allocation,&ticketOption.CreatedAt,&ticketOption.UpdatedAt)
 	if err != nil {
-		http.Error(w,"",404)
+		http.Error(w, "select from ticket options error", 404)
 		return
 	}
 
@@ -112,6 +115,7 @@ func PurchasesFromTicketOptions(w http.ResponseWriter, r *http.Request) {
 	err := BodyToJsonReq(r,&purchases)
 	if err != nil {
 		http.Error(w, "body to json request error", 404)
+		return
 	}
 
 	ticketopt,err := uuid.FromString(ticketOptionsID)
@@ -122,7 +126,8 @@ func PurchasesFromTicketOptions(w http.ResponseWriter, r *http.Request) {
 	// open database
 	db, err := sql.Open("postgres", psqlconn)
 	if err != nil {
-		fmt.Errorf("%v",err)
+		http.Error(w, "db connection error", 404)
+		return
 	}
 	// close database
 	defer db.Close()
@@ -137,6 +142,7 @@ func PurchasesFromTicketOptions(w http.ResponseWriter, r *http.Request) {
 	isThereAvailableTickets := quantityAndAllocationCompare(purchases.Quantity.Int64,allocation)
 
 	if isThereAvailableTickets {
+
 		var purchaseID string
 		sq := fmt.Sprintf("insert into purchases (quantity, user_id, ticket_option_id, created_at, updated_at) values (%d, '%v', '%v', current_timestamp, current_timestamp) returning id",purchases.Quantity.Int64, purchases.UserID, ticketOptionsID)
 		err = db.QueryRow(sq).Scan(&purchaseID)
@@ -152,13 +158,11 @@ func PurchasesFromTicketOptions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		sq = fmt.Sprintf("update ticket_options set allocation = allocation - %d where id::text ='%s' ", purchases.Quantity.Int64,ticketOptionsID)
-		_,err = db.Exec(sq)
-		if err != nil {
-			http.Error(w, "update ticket options error", 404)
+		isAllocationDescreased := decreaseAllocationOfTicket(ticketOptionsID,purchases.Quantity.Int64,db)
+		if !isAllocationDescreased {
+			http.Error(w, " allocation decrease error", 404)
 			return
 		}
-
 		json.NewEncoder(w).Encode(http.StatusOK)
 		return
 	}
@@ -197,7 +201,7 @@ func quantityAndAllocationCompare(quantity int64, allocation int64) bool {
 }
 func decreaseAllocationOfTicket (ticketOptionsID string,quantity int64, db *sql.DB) bool {
 
-	sq := fmt.Sprintf("update ticket_options set allocation = allocation - %d where id::text = %s",quantity,ticketOptionsID)
+	sq := fmt.Sprintf("update ticket_options set allocation = allocation - %d where id::text = '%s'",quantity,ticketOptionsID)
 	_,err := db.Exec(sq)
 	if err != nil {
 		return false

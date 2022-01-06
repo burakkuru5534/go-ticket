@@ -13,6 +13,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+
 	"time"
 
 	"github.com/rs/cors"
@@ -37,22 +38,19 @@ func main() {
 
 	defer timeTrack(time.Now(), "purchase process info")
 	fmt.Println("Starting concurrent calls...")
-	var wg sync.WaitGroup
-	wg.Add(3)
+	wg := new(sync.WaitGroup)
 
-	go func() {
-		r.Handle("/ticket/{id}/purchases", purchasesFromTicketOptions())
-		wg.Done()
-	}()
-	go func() {
-		r.Handle("/ticket/{id}", GetTicketOption())
-		wg.Done()
-	}()
-	go func() {
-		r.Handle("/ticket", CreateTicketOption())
-		wg.Done()
-	}()
-	wg.Wait()
+		//r.Handle("/ticket/{id}/purchases", purchasesFromTicketOptions(wg))
+	go r.Handle("/ticket/{id}/purchases", purchasesFromTicketOptions(wg))
+
+
+
+
+
+		r.Handle("/ticket/{id}", GetTicketOption(wg))
+
+		r.Handle("/ticket", CreateTicketOption(wg))
+
 
 	//define options
 	corsWrapper := cors.New(cors.Options{
@@ -69,8 +67,12 @@ func timeTrack(start time.Time, name string) {
 	log.Printf("%s took %s", name, elapsed)
 }
 
-func purchasesFromTicketOptions() http.Handler {
+func purchasesFromTicketOptions(wg *sync.WaitGroup) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		wg.Wait()
+		wg.Add(1)
+
 		w.Header().Set("Context-Type", "application/x-www-form-urlencoded")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST")
@@ -137,11 +139,14 @@ func purchasesFromTicketOptions() http.Handler {
 			http.Error(w, "there is not any available tickets", 404)
 		}
 
+		wg.Done()
 
 	})
 }
-func GetTicketOption() http.Handler {
+func GetTicketOption(wg *sync.WaitGroup) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wg.Wait()
+		wg.Add(1)
 		w.Header().Set("Context-Type", "application/x-www-form-urlencoded")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST")
@@ -175,11 +180,15 @@ func GetTicketOption() http.Handler {
 		}
 
 		json.NewEncoder(w).Encode(ticketOption)
+		wg.Done()
 
 	})
+
 }
-func CreateTicketOption() http.Handler {
+func CreateTicketOption(wg *sync.WaitGroup) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wg.Wait()
+		wg.Add(1)
 		w.Header().Set("Context-Type", "application/x-www-form-urlencoded")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST")
@@ -215,6 +224,7 @@ func CreateTicketOption() http.Handler {
 		}
 
 		json.NewEncoder(w).Encode(http.StatusOK)
+		wg.Done()
 	})
 }
 

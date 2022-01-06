@@ -45,7 +45,7 @@ func main() {
 		wg.Done()
 	}()
 	go func() {
-		r.Handle("/todo/{id}", GetTicketOption())
+		r.Handle("/ticket/{id}", GetTicketOption())
 		wg.Done()
 	}()
 	go func() {

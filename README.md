@@ -108,3 +108,22 @@ Method: POST
  if quantity greater than allocation then our response:
  
  4xx kind of error and error message: there is not any available tickets.
+ 
+ ### Project Run
+ 
+ This project could build in your local also this is a dockerized project.
+ 
+ sudo docker build . -t go-ticket-docker
+ sudo docker-compose up -d --build
+ docker exec -it postgres psql -U postgres
+
+### Test
+
+I used postman and jmeter for testing.
+
+You can use postman to create ticket options and get ticket options. But I needed to jmeter to test concurrent requests.
+So that's why you can test purchases api with jmeter.
+
+I also used golang's test libary to test database connection and table controls.
+
+

@@ -127,6 +127,6 @@ I used postman and jmeter for testing.
 You can use postman to create ticket options and get ticket options. But I needed to jmeter to test concurrent requests.
 So that's why you can test purchases api with jmeter.
 
-I also used golang's test libary to test database connection and table controls.
+I also used golang's test library to test database connection and table controls.
 
 

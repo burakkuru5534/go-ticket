@@ -113,9 +113,12 @@ Method: POST
  
  This project could build in your local also this is a dockerized project.
  
- sudo docker build . -t go-ticket-docker
- sudo docker-compose up -d --build
- docker exec -it postgres psql -U postgres
+ $sudo docker build . -t go-ticket-docker
+ 
+ $sudo docker-compose up -d --build
+ 
+ $docker exec -it postgres psql -U postgres
+ 
 
 ### Test
 

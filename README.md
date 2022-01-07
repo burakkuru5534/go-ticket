@@ -31,7 +31,7 @@ ticket_options: In this table, the conditions of the tickets created for ticket 
 purchases: In this table, the relations of the tickets that have been sold with the users who made the purchase are kept.
 
 tickets: In this table, the relationship between the tickets sold and the ticket conditions is kept.
----
+
 
 ## Problem solution
 

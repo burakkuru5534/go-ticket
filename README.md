@@ -63,7 +63,7 @@ Get Ticket Options request url example:
 
  Method: GET
  
-  http://localhost:8080/ticket_options/{id}
+  http://localhost:8080/ticket_options?id=9368ec0b-701a-4be8-a267-b5deb1063128
   
    id: this id should be one of the ticket_options's ids. 
 
@@ -91,7 +91,7 @@ Purchases from Ticket Options request url example:
 
 Method: POST
 
- http://localhost:8080/ticket_options/{id}/purchases
+ http://localhost:8080/ticket_options/purchases?id=9368ec0b-701a-4be8-a267-b5deb1063128
  
  id: this id should be one of the ticket_options's ids. 
  request Body Example:

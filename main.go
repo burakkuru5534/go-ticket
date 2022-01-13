@@ -54,17 +54,14 @@ func main() {
 
 	fmt.Println("Connected!")
 
-
 	initDB(db)
 	wg := new(sync.WaitGroup)
 
-		//r.Handle("/ticket/{id}/purchases", purchasesFromTicketOptions(wg))
-	go r.Handle("/ticket_options/{id}/purchases", purchasesFromTicketOptions(wg, db))
+	//r.Handle("/ticket/{id}/purchases", purchasesFromTicketOptions(wg))
+	go r.Handle("/ticket_options/purchases", purchasesFromTicketOptions(wg, db))
 
-		r.Handle("/ticket_options/{id}", GetTicketOption(wg, db))
-
-		r.Handle("/ticket_options", CreateTicketOption(wg, db))
-
+	r.PathPrefix("/ticket_options").HandlerFunc(GetTicketOption).Methods("GET")
+	r.PathPrefix("/ticket_options").HandlerFunc(CreateTicketOption).Methods("POST")
 
 	//define options
 	corsWrapper := cors.New(cors.Options{
@@ -92,8 +89,7 @@ func purchasesFromTicketOptions(wg *sync.WaitGroup, db *sql.DB) http.Handler {
 		w.Header().Set("Access-Control-Allow-Methods", "POST")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-		ticketOptionID := mux.Vars(r)
-		ticketOptionsID := createKeyValuePairs(ticketOptionID)
+		ticketOptionsID := r.FormValue("id")
 
 		var purchases models.Purchases
 		err := BodyToJsonReq(r, &purchases)
@@ -104,8 +100,6 @@ func purchasesFromTicketOptions(wg *sync.WaitGroup, db *sql.DB) http.Handler {
 
 		ticketopt, err := uuid.FromString(ticketOptionsID)
 		purchases.TicketOptionID = uuid2.UUID(ticketopt)
-
-
 
 		allocation := getAllocationOfTicketOptions(uuid.UUID(purchases.TicketOptionID), db)
 
@@ -135,7 +129,7 @@ func purchasesFromTicketOptions(wg *sync.WaitGroup, db *sql.DB) http.Handler {
 			}
 			json.NewEncoder(w).Encode(http.StatusOK)
 
-		}else {
+		} else {
 			http.Error(w, "there is not any available tickets", 404)
 		}
 
@@ -143,60 +137,82 @@ func purchasesFromTicketOptions(wg *sync.WaitGroup, db *sql.DB) http.Handler {
 
 	})
 }
-func GetTicketOption(wg *sync.WaitGroup, db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wg.Wait()
-		wg.Add(1)
-		w.Header().Set("Context-Type", "application/x-www-form-urlencoded")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		var ticketOption models.TicketOptions
 
-		params := mux.Vars(r)
-		id := createKeyValuePairs(params)
+func GetTicketOption(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Set("Context-Type", "application/x-www-form-urlencoded")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	var ticketOption models.TicketOptions
 
 
-		sq := fmt.Sprintf("select id::text,name,\"desc\",allocation,created_at,updated_at from  ticket_options where id::text = '%s'", id)
-		err := db.QueryRow(sq).Scan(&ticketOption.ID, &ticketOption.Name, &ticketOption.Desc, &ticketOption.Allocation, &ticketOption.CreatedAt, &ticketOption.UpdatedAt)
-		if err != nil {
-			http.Error(w, "select from ticket options error", 404)
-			return
-		}
+	id := r.FormValue("id")
 
-		json.NewEncoder(w).Encode(ticketOption)
-		wg.Done()
+	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 
-	})
+	// open database
+	db, err := sql.Open("postgres", psqlconn)
+	if err != nil {
+		panic(err)
+	}
+	// close database
+	defer db.Close()
+
+	// check db
+	err = db.Ping()
+
+	fmt.Println("Connected!")
+
+	sq := fmt.Sprintf("select id::text,name,\"desc\",allocation,created_at,updated_at from  ticket_options where id::text = '%s'", id)
+	err = db.QueryRow(sq).Scan(&ticketOption.ID, &ticketOption.Name, &ticketOption.Desc, &ticketOption.Allocation, &ticketOption.CreatedAt, &ticketOption.UpdatedAt)
+	if err != nil {
+		http.Error(w, "select from ticket options error", 404)
+		return
+	}
+
+	json.NewEncoder(w).Encode(ticketOption)
 
 }
-func CreateTicketOption(wg *sync.WaitGroup, db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		wg.Wait()
-		wg.Add(1)
-		w.Header().Set("Context-Type", "application/x-www-form-urlencoded")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		var ticketOption models.TicketOptions
-		err := BodyToJsonReq(r, &ticketOption)
-		if err != nil {
-			http.Error(w, "body to json request error", 404)
-			return
-		}
+func CreateTicketOption(w http.ResponseWriter, r *http.Request) {
 
+	w.Header().Set("Context-Type", "application/x-www-form-urlencoded")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
-		sq := fmt.Sprintf("insert into ticket_options (name, \"desc\", allocation, created_at, updated_at) values ('%s', '%s', %d, current_timestamp, current_timestamp)", ticketOption.Name.String, ticketOption.Desc.String, ticketOption.Allocation)
-		_, err = db.Exec(sq)
-		if err != nil {
-			http.Error(w, "insert ticket options error", 404)
-			return
-		}
+	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 
-		json.NewEncoder(w).Encode(http.StatusOK)
-		wg.Done()
-	})
+	// open database
+	db, err := sql.Open("postgres", psqlconn)
+	if err != nil {
+		panic(err)
+	}
+	// close database
+	defer db.Close()
+
+	// check db
+	err = db.Ping()
+
+	fmt.Println("Connected!")
+	var ticketOption models.TicketOptions
+	err = BodyToJsonReq(r, &ticketOption)
+	if err != nil {
+		http.Error(w, "body to json request error", 404)
+		return
+	}
+
+	sq := fmt.Sprintf("insert into ticket_options (name, \"desc\", allocation, created_at, updated_at) values ('%s', '%s', %d, current_timestamp, current_timestamp)", ticketOption.Name.String, ticketOption.Desc.String, ticketOption.Allocation)
+	_, err = db.Exec(sq)
+	if err != nil {
+		http.Error(w, "insert ticket options error", 404)
+		return
+	}
+
+	json.NewEncoder(w).Encode(http.StatusOK)
+
 }
+
 
 //helper functions
 func BodyToJsonReq(r *http.Request, data interface{}) error {
@@ -245,7 +261,7 @@ func getAllocationOfTicketOptions(ticketOptionsID uuid.UUID, db *sql.DB) int64 {
 	return allocation
 }
 
-func initDB (db *sql.DB){
+func initDB(db *sql.DB) {
 
 	sq := `
 	--

@@ -1,28 +1,21 @@
 // main_test.go
-package main_test
+package main
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
-	"os"
+	"log"
+	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 
-	"log"
-
 	_ "net/http"
-
-)
-
-const (
-	host     = "localhost"
-	port     = 5432
-	user     = "postgres"
-	password = "tayitkan"
-	dbname   = "ticketapp"
 )
 
 
-func TestMain(m *testing.M) {
+func TestDbConnection(t *testing.T) {
 
 	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 
@@ -40,8 +33,7 @@ func TestMain(m *testing.M) {
 	fmt.Println("Connected!")
 
 	ensureTableExists(db)
-	code := m.Run()
-	os.Exit(code)
+
 }
 
 func ensureTableExists(db *sql.DB) {
@@ -49,6 +41,108 @@ func ensureTableExists(db *sql.DB) {
 		log.Fatal(err)
 	}
 }
+
+func TestGetTicketOptions(t *testing.T) {
+
+	req, err := http.NewRequest("GET", "/ticket_options", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+
+	q := req.URL.Query()
+	q.Add("id", "9368ec0b-701a-4be8-a267-b5deb1063128")
+	req.URL.RawQuery = q.Encode()
+
+	handler := http.HandlerFunc(GetTicketOption)
+	handler.ServeHTTP(rr, req)
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+	// Check the response body is what we expect.
+	expected := `{"ID":"9368ec0b-701a-4be8-a267-b5deb1063128","Name":"test ticket name","Desc":"test desc name","Allocation":1000,"CreatedAt":"2022-01-04T19:40:43.728787Z","UpdatedAt":"2022-01-04T19:40:43.728787Z"}
+`
+	if rr.Body.String() != expected {
+		t.Errorf("handler returned unexpected body: got %v want %v",
+			rr.Body.String(), expected)
+	}
+}
+
+func TestCreateTicketOptions(t *testing.T) {
+
+	var jsonStr = []byte(`{
+    "Name":"Test Ticket Options Name",
+    "Desc":"There are 10.000 available tickets.",
+    "Allocation":10000
+}`)
+
+	req, err := http.NewRequest("POST", "/ticket_options", bytes.NewBuffer(jsonStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+
+	handler := http.HandlerFunc(CreateTicketOption)
+	handler.ServeHTTP(rr, req)
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+}
+
+func TestPurchasesFromTicketOptions(t *testing.T) {
+
+	wg := new(sync.WaitGroup)
+	psqlconn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+
+	// open database
+	db, err := sql.Open("postgres", psqlconn)
+	if err != nil {
+		panic(err)
+	}
+	// close database
+	defer db.Close()
+
+	// check db
+	err = db.Ping()
+
+	fmt.Println("Connected!")
+
+	var jsonStr = []byte(`{
+  "Quantity": 2,
+  "UserID": "406c1d05-bbb2-4e94-b183-7d208c2692e1"
+}`)
+
+	req, err := http.NewRequest("POST", "/ticket_options", bytes.NewBuffer(jsonStr))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	q := req.URL.Query()
+	q.Add("id", "9368ec0b-701a-4be8-a267-b5deb1063128")
+	req.URL.RawQuery = q.Encode()
+
+
+	req.Header.Set("Content-Type", "application/json")
+
+	rr := httptest.NewRecorder()
+
+	handler := purchasesFromTicketOptions(wg,db)
+	handler.ServeHTTP(rr, req)
+	if status := rr.Code; status != http.StatusOK {
+		t.Errorf("handler returned wrong status code: got %v want %v",
+			status, http.StatusOK)
+	}
+
+}
+
 
 const tableCreationQuery = `
 --
@@ -180,4 +274,4 @@ CREATE TABLE if not exists tickets (
 --
 -- PostgreSQL database dump complete
 
-)`
+`
